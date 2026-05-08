@@ -33,6 +33,16 @@ namespace lumaMatrix {
     let pinDownButton: DigitalPin = DigitalPin.P13;
     let pinRightButton: DigitalPin = DigitalPin.P7;
     let pinLeftButton: DigitalPin = DigitalPin.P12;
+
+    let useAnalogJoystick = false;
+    
+    let pinJoystickX: AnalogPin = AnalogPin.P2;
+    let pinJoystickY: AnalogPin = AnalogPin.P3;
+    
+    let joystickLow = 300;
+    let joystickHigh = 700;
+    
+    
     let lastSwitchValue = readSwitch(); // used for switchValueChanged
     let lastJoystickDirection: eJoystickDirection = eJoystickDirection.NotPressed; // used for joystickDirectionChanged
     let result: number[][] = [];
@@ -453,24 +463,81 @@ namespace lumaMatrix {
     }
 
     /**
+     * Enable analog joystick mode
+     */
+    //% blockId="ZHAW_Input_EnableAnalogJoystick"
+    //% block="enable analog joystick x $xPin y $yPin"
+    //% subcategory="Input"
+    export function enableAnalogJoystick(xPin: AnalogPin, yPin: AnalogPin): void {
+    
+        useAnalogJoystick = true;
+    
+        pinJoystickX = xPin;
+        pinJoystickY = yPin;
+    }
+
+    /**
      * Read Luma Matrix joystick position as text
      */
     //% blockId="ZHAW_Input_JoystickReadStr"
     //% block="joystick direction text"
     //% subcategory="Input"
-    export function readJoystickText(): string {
+    export function readJoystick(): number {
+
+        // ANALOG JOYSTICK MODE
+        if (useAnalogJoystick) {
+    
+            let x = pins.analogReadPin(pinJoystickX);
+            let y = pins.analogReadPin(pinJoystickY);
+    
+            if (pins.digitalReadPin(pinCenterButton) == 0) {
+                return eJoystickDirection.Center;
+            }
+    
+            else if (y < joystickLow) {
+                return eJoystickDirection.Up;
+            }
+    
+            else if (y > joystickHigh) {
+                return eJoystickDirection.Down;
+            }
+    
+            else if (x > joystickHigh) {
+                return eJoystickDirection.Right;
+            }
+    
+            else if (x < joystickLow) {
+                return eJoystickDirection.Left;
+            }
+    
+            else {
+                return eJoystickDirection.NotPressed;
+            }
+        }
+    
+        // ORIGINAL IO BIT DIGITAL JOYSTICK
         if (pins.digitalReadPin(pinCenterButton) == 0) {
-            return "Center\n";
-        } else if (pins.digitalReadPin(pinUpButton) == 0) {
-            return "Up\n";
-        } else if (pins.digitalReadPin(pinDownButton) == 0) {
-            return "Down\n";
-        } else if (pins.digitalReadPin(pinRightButton) == 0) {
-            return "Right\n";
-        } else if (pins.digitalReadPin(pinLeftButton) == 0) {
-            return "Left\n";
-        } else {
-            return "NotPressed\n";
+            return eJoystickDirection.Center;
+        }
+    
+        else if (pins.digitalReadPin(pinUpButton) == 0) {
+            return eJoystickDirection.Up;
+        }
+    
+        else if (pins.digitalReadPin(pinDownButton) == 0) {
+            return eJoystickDirection.Down;
+        }
+    
+        else if (pins.digitalReadPin(pinRightButton) == 0) {
+            return eJoystickDirection.Right;
+        }
+    
+        else if (pins.digitalReadPin(pinLeftButton) == 0) {
+            return eJoystickDirection.Left;
+        }
+    
+        else {
+            return eJoystickDirection.NotPressed;
         }
     }
 
