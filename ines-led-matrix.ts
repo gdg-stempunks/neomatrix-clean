@@ -26,23 +26,22 @@ namespace lumaMatrix {
     export let matrixHeight = 8; // y, min 4
     export let currentBrightness = 100; // 0 to 255
     export let pollingInterval = 10 // 10ms Interval for polling LED Matrix Interface. Adjust the polling interval as needed.
+    // Universal wiring for RobotBit + mini extension board:
+    // NeoPixel DIN -> P1
+    // Joystick VRX -> P2
+    // Joystick VRY -> P3
+    // Joystick SW  -> P16
     let pinNeopixels: DigitalPin = DigitalPin.P1;
     let pinSwitch: DigitalPin = DigitalPin.P16;
-    let pinCenterButton: DigitalPin = DigitalPin.P2;
-    let pinUpButton: DigitalPin = DigitalPin.P9;
-    let pinDownButton: DigitalPin = DigitalPin.P13;
-    let pinRightButton: DigitalPin = DigitalPin.P7;
-    let pinLeftButton: DigitalPin = DigitalPin.P12;
+    let pinCenterButton: DigitalPin = DigitalPin.P16;
 
-    let useAnalogJoystick = false;
-    
     let pinJoystickX: AnalogPin = AnalogPin.P2;
     let pinJoystickY: AnalogPin = AnalogPin.P3;
-    
+
     let joystickLow = 300;
     let joystickHigh = 700;
-    
-    
+
+
     let lastSwitchValue = readSwitch(); // used for switchValueChanged
     let lastJoystickDirection: eJoystickDirection = eJoystickDirection.NotPressed; // used for joystickDirectionChanged
     let result: number[][] = [];
@@ -206,11 +205,7 @@ namespace lumaMatrix {
     function initializeMatrixInterface(): void {
         pins.setPull(pinSwitch, PinPullMode.PullUp);
         pins.setPull(pinCenterButton, PinPullMode.PullUp);
-        pins.setPull(pinUpButton, PinPullMode.PullUp);
-        pins.setPull(pinDownButton, PinPullMode.PullUp);
-        pins.setPull(pinRightButton, PinPullMode.PullUp);
-        pins.setPull(pinLeftButton, PinPullMode.PullUp);
-        serialDebugMsg("initializeMatrixInterface: pinSwitch: " + pinSwitch + ", pinCenterButton:" + pinCenterButton + ", pinUpButton: " + pinUpButton + ", pinDownButton: " + pinDownButton + ", pinRightButton:" + pinRightButton + ", pinLeftButton: " + pinLeftButton);
+        serialDebugMsg("initializeMatrixInterface: NeoPixels P1, joystick X P2, joystick Y P3, joystick button P16");
     }
 
     /**
@@ -441,21 +436,28 @@ namespace lumaMatrix {
     }
 
     /**
-     * Read Luma Matrix joystick position
+     * Read Luma Matrix joystick position.
+     * Uses an analog joystick:
+     * VRX -> P2
+     * VRY -> P3
+     * SW  -> P16
      */
     //% blockId="ZHAW_Input_JoystickRead"
     //% block="joystick direction"
     //% subcategory="Input"
     export function readJoystick(): number {
+        let x = pins.analogReadPin(pinJoystickX);
+        let y = pins.analogReadPin(pinJoystickY);
+
         if (pins.digitalReadPin(pinCenterButton) == 0) {
             return eJoystickDirection.Center;
-        } else if (pins.digitalReadPin(pinUpButton) == 0) {
+        } else if (y < joystickLow) {
             return eJoystickDirection.Up;
-        } else if (pins.digitalReadPin(pinDownButton) == 0) {
+        } else if (y > joystickHigh) {
             return eJoystickDirection.Down;
-        } else if (pins.digitalReadPin(pinRightButton) == 0) {
+        } else if (x > joystickHigh) {
             return eJoystickDirection.Right;
-        } else if (pins.digitalReadPin(pinLeftButton) == 0) {
+        } else if (x < joystickLow) {
             return eJoystickDirection.Left;
         } else {
             return eJoystickDirection.NotPressed;
@@ -463,17 +465,33 @@ namespace lumaMatrix {
     }
 
     /**
-     * Enable analog joystick mode
+     * Set the analog joystick pins.
+     * Defaults are X P2, Y P3, button P16.
      */
-    //% blockId="ZHAW_Input_EnableAnalogJoystick"
-    //% block="enable analog joystick x $xPin y $yPin"
+    //% blockId="ZHAW_Input_SetAnalogJoystickPins"
+    //% block="set analog joystick x $xPin y $yPin button $buttonPin"
+    //% xPin.defl=AnalogPin.P2
+    //% yPin.defl=AnalogPin.P3
+    //% buttonPin.defl=DigitalPin.P16
     //% subcategory="Input"
-    export function enableAnalogJoystick(xPin: AnalogPin, yPin: AnalogPin): void {
-    
-        useAnalogJoystick = true;
-    
+    export function setAnalogJoystickPins(xPin: AnalogPin, yPin: AnalogPin, buttonPin: DigitalPin): void {
         pinJoystickX = xPin;
         pinJoystickY = yPin;
+        pinCenterButton = buttonPin;
+        pins.setPull(pinCenterButton, PinPullMode.PullUp);
+    }
+
+    /**
+     * Set analog joystick sensitivity thresholds.
+     */
+    //% blockId="ZHAW_Input_SetJoystickThresholds"
+    //% block="set joystick low $low high $high"
+    //% low.defl=300 low.min=0 low.max=1023
+    //% high.defl=700 high.min=0 high.max=1023
+    //% subcategory="Input"
+    export function setJoystickThresholds(low: number, high: number): void {
+        joystickLow = Math.max(0, Math.min(1023, low));
+        joystickHigh = Math.max(0, Math.min(1023, high));
     }
 
     /**
@@ -482,62 +500,21 @@ namespace lumaMatrix {
     //% blockId="ZHAW_Input_JoystickReadStr"
     //% block="joystick direction text"
     //% subcategory="Input"
-    export function readJoystick(): number {
+    export function readJoystickText(): string {
+        let direction = readJoystick();
 
-        // ANALOG JOYSTICK MODE
-        if (useAnalogJoystick) {
-    
-            let x = pins.analogReadPin(pinJoystickX);
-            let y = pins.analogReadPin(pinJoystickY);
-    
-            if (pins.digitalReadPin(pinCenterButton) == 0) {
-                return eJoystickDirection.Center;
-            }
-    
-            else if (y < joystickLow) {
-                return eJoystickDirection.Up;
-            }
-    
-            else if (y > joystickHigh) {
-                return eJoystickDirection.Down;
-            }
-    
-            else if (x > joystickHigh) {
-                return eJoystickDirection.Right;
-            }
-    
-            else if (x < joystickLow) {
-                return eJoystickDirection.Left;
-            }
-    
-            else {
-                return eJoystickDirection.NotPressed;
-            }
-        }
-    
-        // ORIGINAL IO BIT DIGITAL JOYSTICK
-        if (pins.digitalReadPin(pinCenterButton) == 0) {
-            return eJoystickDirection.Center;
-        }
-    
-        else if (pins.digitalReadPin(pinUpButton) == 0) {
-            return eJoystickDirection.Up;
-        }
-    
-        else if (pins.digitalReadPin(pinDownButton) == 0) {
-            return eJoystickDirection.Down;
-        }
-    
-        else if (pins.digitalReadPin(pinRightButton) == 0) {
-            return eJoystickDirection.Right;
-        }
-    
-        else if (pins.digitalReadPin(pinLeftButton) == 0) {
-            return eJoystickDirection.Left;
-        }
-    
-        else {
-            return eJoystickDirection.NotPressed;
+        if (direction == eJoystickDirection.Center) {
+            return "Center\n";
+        } else if (direction == eJoystickDirection.Up) {
+            return "Up\n";
+        } else if (direction == eJoystickDirection.Down) {
+            return "Down\n";
+        } else if (direction == eJoystickDirection.Right) {
+            return "Right\n";
+        } else if (direction == eJoystickDirection.Left) {
+            return "Left\n";
+        } else {
+            return "NotPressed\n";
         }
     }
 
