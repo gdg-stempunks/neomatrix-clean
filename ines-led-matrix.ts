@@ -26,23 +26,15 @@ namespace lumaMatrix {
     export let matrixHeight = 8; // y, min 4
     export let currentBrightness = 100; // 0 to 255
     export let pollingInterval = 10 // 10ms Interval for polling LED Matrix Interface. Adjust the polling interval as needed.
-    // Universal wiring for RobotBit + mini extension board:
-    // NeoPixel DIN -> P1
-    // Joystick VRX -> P2
-    // Joystick VRY -> P3
-    // Joystick SW  -> P16
     let pinNeopixels: DigitalPin = DigitalPin.P1;
-    let pinSwitch: DigitalPin = DigitalPin.P16;
-    let pinCenterButton: DigitalPin = DigitalPin.P16;
 
+    // Universal analog joystick wiring for RobotBit servo headers and mini extension board:
+    // VRX -> P2, VRY -> P8, VCC -> 3V, GND -> GND. SW button is not used.
     let pinJoystickX: AnalogPin = AnalogPin.P2;
-    let pinJoystickY: AnalogPin = AnalogPin.P3;
-
+    let pinJoystickY: AnalogPin = AnalogPin.P8;
     let joystickLow = 300;
     let joystickHigh = 700;
 
-
-    let lastSwitchValue = readSwitch(); // used for switchValueChanged
     let lastJoystickDirection: eJoystickDirection = eJoystickDirection.NotPressed; // used for joystickDirectionChanged
     let result: number[][] = [];
     let binaryArray: number[] = [];
@@ -203,9 +195,7 @@ namespace lumaMatrix {
     }
 
     function initializeMatrixInterface(): void {
-        pins.setPull(pinSwitch, PinPullMode.PullUp);
-        pins.setPull(pinCenterButton, PinPullMode.PullUp);
-        serialDebugMsg("initializeMatrixInterface: NeoPixels P1, joystick X P2, joystick Y P3, joystick button P16");
+        serialDebugMsg("initializeMatrixInterface: analog joystick X P2, Y P8, button not used");
     }
 
     /**
@@ -391,56 +381,8 @@ namespace lumaMatrix {
     }
 
     /**
-     * Read Luma Matrix switch position
-     */
-    //% blockId="ZHAW_Input_SwitchRead"
-    //% block="switch position"
-    //% subcategory="Input"
-    export function readSwitch(): number {
-        return pins.digitalReadPin(pinSwitch);
-    }
-
-    /**
-     * Compare Luma Matrix switch position
-     */
-    //% blockId="ZHAW_Input_SwitchReadBool"
-    //% block="switch is $state"
-    //% state.shadow="toggleOnOff"
-    //% subcategory="Input"
-    export function isSwitchSet(state: boolean): boolean {
-        if(state){
-            return (pins.digitalReadPin(pinSwitch) != 0);
-        }
-        return (pins.digitalReadPin(pinSwitch) == 0);
-    }
-
-    /**
-     * Creates thread to poll switch state and execute callback when state changes. 
-    */
-    //% blockId="ZHAW_Input_SwitchCallback"
-    //% block="when switch value changed"
-    //% draggableParameters="reporter"
-    //% subcategory="Input"
-    export function switchValueChangedThread(callback: (state: boolean) => void): void {
-        control.inBackground(() => {
-            let currentSwitchValue = 0;
-            while (true) {
-                currentSwitchValue = pins.digitalReadPin(pinSwitch);
-                if (currentSwitchValue !== lastSwitchValue) {
-                    lastSwitchValue = currentSwitchValue;
-                    callback(<any>currentSwitchValue)
-                }
-                basic.pause(pollingInterval);
-            }
-        });
-    }
-
-    /**
-     * Read Luma Matrix joystick position.
-     * Uses an analog joystick:
-     * VRX -> P2
-     * VRY -> P3
-     * SW  -> P16
+     * Read Luma Matrix joystick position using an analog joystick.
+     * Default wiring: VRX -> P2, VRY -> P8. The joystick press button is not used.
      */
     //% blockId="ZHAW_Input_JoystickRead"
     //% block="joystick direction"
@@ -449,9 +391,7 @@ namespace lumaMatrix {
         let x = pins.analogReadPin(pinJoystickX);
         let y = pins.analogReadPin(pinJoystickY);
 
-        if (pins.digitalReadPin(pinCenterButton) == 0) {
-            return eJoystickDirection.Center;
-        } else if (y < joystickLow) {
+        if (y < joystickLow) {
             return eJoystickDirection.Up;
         } else if (y > joystickHigh) {
             return eJoystickDirection.Down;
@@ -465,27 +405,23 @@ namespace lumaMatrix {
     }
 
     /**
-     * Set the analog joystick pins.
-     * Defaults are X P2, Y P3, button P16.
+     * Set analog joystick pins. Use this only if you wire the joystick differently.
      */
     //% blockId="ZHAW_Input_SetAnalogJoystickPins"
-    //% block="set analog joystick x $xPin y $yPin button $buttonPin"
+    //% block="set analog joystick x $xPin y $yPin"
     //% xPin.defl=AnalogPin.P2
-    //% yPin.defl=AnalogPin.P3
-    //% buttonPin.defl=DigitalPin.P16
+    //% yPin.defl=AnalogPin.P8
     //% subcategory="Input"
-    export function setAnalogJoystickPins(xPin: AnalogPin, yPin: AnalogPin, buttonPin: DigitalPin): void {
+    export function setAnalogJoystickPins(xPin: AnalogPin, yPin: AnalogPin): void {
         pinJoystickX = xPin;
         pinJoystickY = yPin;
-        pinCenterButton = buttonPin;
-        pins.setPull(pinCenterButton, PinPullMode.PullUp);
     }
 
     /**
      * Set analog joystick sensitivity thresholds.
      */
     //% blockId="ZHAW_Input_SetJoystickThresholds"
-    //% block="set joystick low $low high $high"
+    //% block="set joystick thresholds low $low high $high"
     //% low.defl=300 low.min=0 low.max=1023
     //% high.defl=700 high.min=0 high.max=1023
     //% subcategory="Input"
@@ -503,9 +439,7 @@ namespace lumaMatrix {
     export function readJoystickText(): string {
         let direction = readJoystick();
 
-        if (direction == eJoystickDirection.Center) {
-            return "Center\n";
-        } else if (direction == eJoystickDirection.Up) {
+        if (direction == eJoystickDirection.Up) {
             return "Up\n";
         } else if (direction == eJoystickDirection.Down) {
             return "Down\n";
