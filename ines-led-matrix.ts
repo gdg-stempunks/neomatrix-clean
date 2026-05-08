@@ -26,12 +26,14 @@ namespace lumaMatrix {
     export let matrixHeight = 8; // y, min 4
     export let currentBrightness = 100; // 0 to 255
     export let pollingInterval = 10 // 10ms Interval for polling LED Matrix Interface. Adjust the polling interval as needed.
+    // Default matrix pin is P1 for the mini extension board.
+    // Use the "set matrix pin" block before initialize if your board needs another pin.
     let pinNeopixels: DigitalPin = DigitalPin.P1;
 
-    // Universal analog joystick wiring for RobotBit servo headers and mini extension board:
-    // VRX -> P2, VRY -> P8, VCC -> 3V, GND -> GND. SW button is not used.
-    let pinJoystickX: AnalogPin = AnalogPin.P2;
-    let pinJoystickY: AnalogPin = AnalogPin.P8;
+    // Analog joystick defaults: VRX -> P0, VRY -> P2, VCC -> 3V, GND -> GND. SW button is not used.
+    // For RobotBit, a common setup is Matrix -> P8, VRX -> P1, VRY -> P2.
+    let pinJoystickX: AnalogPin = AnalogPin.P0;
+    let pinJoystickY: AnalogPin = AnalogPin.P2;
     let joystickLow = 300;
     let joystickHigh = 700;
 
@@ -165,6 +167,43 @@ namespace lumaMatrix {
     }
 
     /**
+     * Set which micro:bit pin controls the NeoPixel matrix.
+     * Use this before initializeMatrix if your board uses a different matrix signal pin.
+     */
+    //% blockId="ZHAW_Matrix_SetMatrixPin"
+    //% block="set matrix pin $pin"
+    //% pin.defl=DigitalPin.P1
+    //% group="Pixels" weight=121
+    export function setMatrixPin(pin: DigitalPin): void {
+        pinNeopixels = pin;
+
+        // If the strip was already created, recreate it on the new pin.
+        if (strip) {
+            strip.clear();
+            strip.show();
+            strip = neopixel.create(pinNeopixels, matrixWidth * matrixHeight, NeoPixelMode.RGB);
+            strip.setBrightness(currentBrightness);
+            pixelBuffer.fill(0);
+        }
+
+        serialDebugMsg("setMatrixPin: Matrix pin is set to: " + pinNeopixels);
+    }
+
+    /**
+     * Initialize the 8 by 8 NeoPixel Matrix on a selected pin.
+     * This is a convenience block for boards with different matrix pins.
+     */
+    //% blockId="ZHAW_Matrix_InitWithPin"
+    //% block="initialize Luma Matrix on pin $pin with brightness $brightness"
+    //% pin.defl=DigitalPin.P1
+    //% brightness.defl=127 brightness.min=0 brightness.max=255
+    //% group="Pixels" weight=120
+    export function initializeMatrixOnPin(pin: DigitalPin, brightness: number): void {
+        setMatrixPin(pin);
+        initializeMatrix(brightness);
+    }
+
+    /**
      * Initialize the 8 by 8 Neopixel Matrix with a joystick. 
      * This block needs to be execute only once at the start.
      */
@@ -195,7 +234,7 @@ namespace lumaMatrix {
     }
 
     function initializeMatrixInterface(): void {
-        serialDebugMsg("initializeMatrixInterface: analog joystick X P2, Y P8, button not used");
+        serialDebugMsg("initializeMatrixInterface: analog joystick X " + pinJoystickX + ", Y " + pinJoystickY + ", button not used");
     }
 
     /**
@@ -382,7 +421,7 @@ namespace lumaMatrix {
 
     /**
      * Read Luma Matrix joystick position using an analog joystick.
-     * Default wiring: VRX -> P2, VRY -> P8. The joystick press button is not used.
+     * Default wiring: VRX -> P0, VRY -> P2. The joystick press button is not used.
      */
     //% blockId="ZHAW_Input_JoystickRead"
     //% block="joystick direction"
@@ -409,8 +448,8 @@ namespace lumaMatrix {
      */
     //% blockId="ZHAW_Input_SetAnalogJoystickPins"
     //% block="set analog joystick x $xPin y $yPin"
-    //% xPin.defl=AnalogPin.P2
-    //% yPin.defl=AnalogPin.P8
+    //% xPin.defl=AnalogPin.P0
+    //% yPin.defl=AnalogPin.P2
     //% subcategory="Input"
     export function setAnalogJoystickPins(xPin: AnalogPin, yPin: AnalogPin): void {
         pinJoystickX = xPin;
