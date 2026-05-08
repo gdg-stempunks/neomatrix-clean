@@ -1,6 +1,6 @@
 {
     "name": "neomatrix-clean",
-    "version": "0.1.4",
+    "version": "0.1.8",
     "description": "Extension for Neopixel 8x8 Matrix",
     "license": "MIT",
     "dependencies": {
