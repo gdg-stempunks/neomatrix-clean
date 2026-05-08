@@ -34,8 +34,12 @@ namespace lumaMatrix {
     // For RobotBit, a common setup is Matrix -> P8, VRX -> P1, VRY -> P2.
     let pinJoystickX: AnalogPin = AnalogPin.P0;
     let pinJoystickY: AnalogPin = AnalogPin.P2;
-    let joystickLow = 300;
-    let joystickHigh = 700;
+    let joystickCenterX = 512;
+    let joystickCenterY = 512;
+    let joystickDeadzone = 180;
+    let joystickSwapAxes = false;
+    let joystickInvertX = false;
+    let joystickInvertY = false;
 
     let lastJoystickDirection: eJoystickDirection = eJoystickDirection.NotPressed; // used for joystickDirectionChanged
     let result: number[][] = [];
@@ -234,6 +238,7 @@ namespace lumaMatrix {
     }
 
     function initializeMatrixInterface(): void {
+        calibrateJoystickCenter();
         serialDebugMsg("initializeMatrixInterface: analog joystick X " + pinJoystickX + ", Y " + pinJoystickY + ", button not used");
     }
 
@@ -430,16 +435,44 @@ namespace lumaMatrix {
         let x = pins.analogReadPin(pinJoystickX);
         let y = pins.analogReadPin(pinJoystickY);
 
-        if (y < joystickLow) {
-            return eJoystickDirection.Up;
-        } else if (y > joystickHigh) {
-            return eJoystickDirection.Down;
-        } else if (x > joystickHigh) {
-            return eJoystickDirection.Right;
-        } else if (x < joystickLow) {
-            return eJoystickDirection.Left;
-        } else {
+        let dx = x - joystickCenterX;
+        let dy = y - joystickCenterY;
+
+        if (joystickSwapAxes) {
+            let temp = dx;
+            dx = dy;
+            dy = temp;
+        }
+
+        if (joystickInvertX) {
+            dx = 0 - dx;
+        }
+
+        if (joystickInvertY) {
+            dy = 0 - dy;
+        }
+
+        let absX = Math.abs(dx);
+        let absY = Math.abs(dy);
+
+        // Ignore small movement around the centre.
+        if (absX < joystickDeadzone && absY < joystickDeadzone) {
             return eJoystickDirection.NotPressed;
+        }
+
+        // Use the strongest axis so diagonal/noisy readings do not get stuck.
+        if (absX > absY) {
+            if (dx > 0) {
+                return eJoystickDirection.Right;
+            } else {
+                return eJoystickDirection.Left;
+            }
+        } else {
+            if (dy > 0) {
+                return eJoystickDirection.Down;
+            } else {
+                return eJoystickDirection.Up;
+            }
         }
     }
 
@@ -454,19 +487,104 @@ namespace lumaMatrix {
     export function setAnalogJoystickPins(xPin: AnalogPin, yPin: AnalogPin): void {
         pinJoystickX = xPin;
         pinJoystickY = yPin;
+        calibrateJoystickCenter();
     }
 
     /**
-     * Set analog joystick sensitivity thresholds.
+     * Calibrate the current joystick position as the centre. Keep the joystick still when this runs.
      */
-    //% blockId="ZHAW_Input_SetJoystickThresholds"
-    //% block="set joystick thresholds low $low high $high"
-    //% low.defl=300 low.min=0 low.max=1023
-    //% high.defl=700 high.min=0 high.max=1023
+    //% blockId="ZHAW_Input_CalibrateJoystickCenter"
+    //% block="calibrate joystick center"
     //% subcategory="Input"
-    export function setJoystickThresholds(low: number, high: number): void {
-        joystickLow = Math.max(0, Math.min(1023, low));
-        joystickHigh = Math.max(0, Math.min(1023, high));
+    export function calibrateJoystickCenter(): void {
+        basic.pause(100);
+        let totalX = 0;
+        let totalY = 0;
+
+        for (let i = 0; i < 10; i++) {
+            totalX += pins.analogReadPin(pinJoystickX);
+            totalY += pins.analogReadPin(pinJoystickY);
+            basic.pause(10);
+        }
+
+        joystickCenterX = Math.idiv(totalX, 10);
+        joystickCenterY = Math.idiv(totalY, 10);
+        serialDebugMsg("calibrateJoystickCenter: X=" + joystickCenterX + ", Y=" + joystickCenterY);
+    }
+
+    /**
+     * Set analog joystick deadzone. Bigger numbers make the joystick less sensitive.
+     */
+    //% blockId="ZHAW_Input_SetJoystickDeadzone"
+    //% block="set joystick deadzone $deadzone"
+    //% deadzone.defl=180 deadzone.min=20 deadzone.max=500
+    //% subcategory="Input"
+    export function setJoystickDeadzone(deadzone: number): void {
+        joystickDeadzone = Math.max(20, Math.min(500, deadzone));
+    }
+
+
+    /**
+     * Fix joystick direction if your joystick module or wiring is flipped.
+     */
+    //% blockId="ZHAW_Input_SetJoystickOptions"
+    //% block="set joystick options swap axes $swapAxes invert x $invertX invert y $invertY"
+    //% swapAxes.shadow="toggleOnOff"
+    //% invertX.shadow="toggleOnOff"
+    //% invertY.shadow="toggleOnOff"
+    //% subcategory="Input"
+    export function setJoystickOptions(swapAxes: boolean, invertX: boolean, invertY: boolean): void {
+        joystickSwapAxes = swapAxes;
+        joystickInvertX = invertX;
+        joystickInvertY = invertY;
+    }
+
+    /**
+     * Read how far the joystick is from its calibrated X centre. Useful for testing.
+     */
+    //% blockId="ZHAW_Input_JoystickXDelta"
+    //% block="joystick x movement"
+    //% subcategory="Input"
+    export function joystickXMovement(): number {
+        let dx = pins.analogReadPin(pinJoystickX) - joystickCenterX;
+        if (joystickInvertX) {
+            dx = 0 - dx;
+        }
+        return dx;
+    }
+
+    /**
+     * Read how far the joystick is from its calibrated Y centre. Useful for testing.
+     */
+    //% blockId="ZHAW_Input_JoystickYDelta"
+    //% block="joystick y movement"
+    //% subcategory="Input"
+    export function joystickYMovement(): number {
+        let dy = pins.analogReadPin(pinJoystickY) - joystickCenterY;
+        if (joystickInvertY) {
+            dy = 0 - dy;
+        }
+        return dy;
+    }
+
+    /**
+     * Read raw analog joystick X value. Useful for testing wiring.
+     */
+    //% blockId="ZHAW_Input_JoystickXValue"
+    //% block="joystick x value"
+    //% subcategory="Input"
+    export function joystickXValue(): number {
+        return pins.analogReadPin(pinJoystickX);
+    }
+
+    /**
+     * Read raw analog joystick Y value. Useful for testing wiring.
+     */
+    //% blockId="ZHAW_Input_JoystickYValue"
+    //% block="joystick y value"
+    //% subcategory="Input"
+    export function joystickYValue(): number {
+        return pins.analogReadPin(pinJoystickY);
     }
 
     /**
